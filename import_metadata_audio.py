@@ -7,7 +7,10 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from tkinter import ttk
 
-import sv_ttk
+try:
+    import sv_ttk
+except ImportError:
+    sv_ttk = None
 
 
 AUDIO_EXTS = ('.mp3', '.flac', '.m4a', '.ogg')
@@ -48,30 +51,20 @@ KNOWN_ID3_KEYS = [
 
 
 def get_base_tag_key(tag_key: str) -> str:
-    """
-    Para claves tipo 'APIC:Cover' devolvemos 'APIC'.
-    Para otras, se mantiene tal cual.
-    """
+    """Para claves tipo 'APIC:Cover' devolvemos 'APIC'."""
     if ":" in tag_key:
         return tag_key.split(":", 1)[0]
     return tag_key
 
 
 def get_friendly_name(tag_key: str) -> str:
-    """
-    Devuelve el nombre humanizado de una clave de metadato,
-    o la propia clave si no tenemos mapeo.
-    """
+    """Nombre humanizado si lo tenemos mapeado."""
     base = get_base_tag_key(tag_key)
     return FRAME_HUMAN_MAP.get(base, FRAME_HUMAN_MAP.get(tag_key, tag_key))
 
 
 def header_for_excel(tag_key: str) -> str:
-    """
-    Nombre de columna final para Excel: 'Título (TIT2)' por ejemplo,
-    para no perder la referencia a la clave original.
-    Si no hay mapeo, devuelve simplemente la clave.
-    """
+    """Nombre de columna final: 'Título (TIT2)' por ejemplo."""
     friendly = get_friendly_name(tag_key)
     if friendly == tag_key:
         return tag_key
@@ -79,9 +72,11 @@ def header_for_excel(tag_key: str) -> str:
 
 
 class MetadataApp:
-    def __init__(self, root):
+    def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("Extractor de metadatos de música")
+        self.root.title("Extractor de metadatos de música – Metamusic Extract")
+        self.root.geometry("950x600")
+        self.root.minsize(850, 520)
 
         # Datos escaneados
         self.data_rows = []
@@ -94,33 +89,70 @@ class MetadataApp:
         # Dict clave_real -> BooleanVar (checkbox)
         self.field_vars = {}
 
-        # UI
+        # Estilos propios (encima del tema Sun Valley)
+        style = ttk.Style(self.root)
+        style.configure("Header.TLabel", font=("Segoe UI", 18, "bold"))
+        style.configure("SubHeader.TLabel", font=("Segoe UI", 10))
+        style.configure("Status.TLabel", font=("Segoe UI", 9))
+
         self._build_ui()
 
+    # ------------- UI -----------------
+
     def _build_ui(self):
-        frame_top = ttk.Frame(self.root, padding=10)
-        frame_top.pack(fill="x")
+        # CABECERA
+        header = ttk.Frame(self.root, padding=(20, 15))
+        header.pack(fill="x")
+
+        ttk.Label(header, text="Metamusic Extract", style="Header.TLabel").pack(anchor="w")
+        ttk.Label(
+            header,
+            text="Asistente de Extracción de metadatos musicales desde tus archivos de audio.",
+            style="SubHeader.TLabel"
+        ).pack(anchor="w", pady=(2, 0))
+
+        # CONTROLES SUPERIORES (selección de carpeta)
+        controls = ttk.Frame(self.root, padding=(20, 5))
+        controls.pack(fill="x")
 
         btn_sel_carpeta = ttk.Button(
-            frame_top,
-            text="1) Seleccionar carpeta y escanear",
+            controls,
+            text="1) Seleccionar carpeta a escanear",
             command=self.on_seleccionar_carpeta
         )
-        btn_sel_carpeta.pack(side="left")
+        btn_sel_carpeta.grid(row=0, column=0, sticky="w")
 
-        self.lbl_carpeta = ttk.Label(frame_top, text="Carpeta: (ninguna seleccionada)")
-        self.lbl_carpeta.pack(side="left", padx=10)
+        self.lbl_carpeta = ttk.Label(
+            controls,
+            text="Carpeta: (ninguna seleccionada)",
+            wraplength=500
+        )
+        self.lbl_carpeta.grid(row=0, column=1, sticky="w", padx=(15, 0))
 
-        # Frame para checkboxes
-        self.frame_campos = ttk.Frame(self.root, padding=10)
+        controls.columnconfigure(1, weight=1)
+
+        # ZONA CENTRAL (checkboxes)
+        self.frame_campos = ttk.Frame(self.root, padding=(20, 10))
         self.frame_campos.pack(fill="both", expand=True)
 
-        # Botón exportar
-        frame_bottom = ttk.Frame(self.root, padding=10)
-        frame_bottom.pack(fill="x")
+        # BARRA INFERIOR: estado + botones
+        bottom = ttk.Frame(self.root, padding=(20, 10))
+        bottom.pack(fill="x")
 
-        btn_exportar = ttk.Button(frame_bottom, text="2) Exportar a Excel", command=self.on_exportar)
-        btn_exportar.pack(side="right")
+        self.status_label = ttk.Label(
+            bottom,
+            text="Listo. Selecciona una carpeta para empezar.",
+            style="Status.TLabel"
+        )
+        self.status_label.pack(side="left", fill="x", expand=True)
+
+        btn_cerrar = ttk.Button(bottom, text="Cerrar Metamusic Extract", command=self.root.destroy)
+        btn_cerrar.pack(side="right")
+
+        btn_exportar = ttk.Button(bottom, text="Exportar a Excel", command=self.on_exportar)
+        btn_exportar.pack(side="right", padx=(0, 10))
+
+    # ------------- LÓGICA -----------------
 
     def on_seleccionar_carpeta(self):
         carpeta = filedialog.askdirectory(title="Selecciona la carpeta de música a escanear")
@@ -129,11 +161,14 @@ class MetadataApp:
 
         self.carpeta_origen = carpeta
         self.lbl_carpeta.config(text=f"Carpeta: {ruta_truncada(carpeta)}")
+        self.status_label.config(text="Escaneando archivos de audio…")
 
         # Escanear
+        self.root.update_idletasks()
         self.data_rows, music_fields_set = self.scan_folder(carpeta)
 
         if not self.data_rows:
+            self.status_label.config(text="No se han encontrado archivos de audio compatibles.")
             messagebox.showwarning(
                 "Sin datos",
                 "No se han encontrado archivos de audio compatibles en la carpeta seleccionada."
@@ -149,6 +184,10 @@ class MetadataApp:
         # Reconstruir checkboxes
         self.build_checkboxes()
 
+        self.status_label.config(
+            text=f"Escaneo completado: {len(self.data_rows)} archivos. "
+                 f"Metadatos musicales detectados: {len(self.music_fields)}."
+        )
         messagebox.showinfo(
             "Escaneo completado",
             f"Se han encontrado {len(self.data_rows)} archivos de audio.\n"
@@ -202,13 +241,15 @@ class MetadataApp:
 
                     for key, value in items_iter:
                         key_str = str(key)
-                        # Evitar volcar binarios de carátulas: APIC → ponemos una marca simbólica
                         base = get_base_tag_key(key_str)
+
+                        # Evitar volcar binarios de carátulas
                         if base == "APIC":
                             row[key_str] = "[Imagen de carátula]"
                         else:
                             text = self._value_to_text(value)
                             row[key_str] = text
+
                         music_fields.add(key_str)
 
                 datos.append(row)
@@ -217,9 +258,7 @@ class MetadataApp:
 
     @staticmethod
     def _value_to_text(value):
-        """
-        Convierte un valor de tag (ID3Frame, lista, etc.) a texto plano.
-        """
+        """Convierte un valor de tag (ID3Frame, lista, etc.) a texto plano."""
         if hasattr(value, "text"):
             try:
                 return ", ".join(str(v) for v in value.text)
@@ -241,35 +280,25 @@ class MetadataApp:
 
         self.field_vars.clear()
 
-        # Sección de campos básicos
-        lbl_basicos = ttk.Label(
-            self.frame_campos,
-            text="Campos básicos",
-            font=("Segoe UI", 10, "bold")
-        )
-        lbl_basicos.pack(anchor="w")
+        # Marco general con dos columnas
+        frame_main = ttk.Frame(self.frame_campos)
+        frame_main.pack(fill="both", expand=True)
 
-        frame_basicos = ttk.Frame(self.frame_campos)
-        frame_basicos.pack(fill="x", pady=(0, 10))
+        # ---- Campos básicos ----
+        frame_basicos = ttk.LabelFrame(frame_main, text="Campos básicos", padding=10)
+        frame_basicos.grid(row=0, column=0, sticky="nsew", padx=(0, 10), pady=(0, 5))
 
         for field in self.basic_fields:
             var = tk.BooleanVar(value=True)  # por defecto incluidos
             chk = ttk.Checkbutton(frame_basicos, text=field, variable=var)
-            chk.pack(anchor="w")
+            chk.pack(anchor="w", pady=2)
             self.field_vars[field] = var
 
-        # Sección de metadatos musicales
-        lbl_musicales = ttk.Label(
-            self.frame_campos,
-            text="Metadatos musicales detectados",
-            font=("Segoe UI", 10, "bold")
-        )
-        lbl_musicales.pack(anchor="w")
+        # ---- Metadatos musicales ----
+        frame_musicales = ttk.LabelFrame(frame_main, text="Metadatos musicales detectados", padding=5)
+        frame_musicales.grid(row=0, column=1, sticky="nsew", pady=(0, 5))
 
-        frame_musicales = ttk.Frame(self.frame_campos)
-        frame_musicales.pack(fill="both", expand=True)
-
-        # Scroll por si hay muchos metadatos
+        # Scrollable area
         canvas = tk.Canvas(frame_musicales, highlightthickness=0)
         scrollbar = ttk.Scrollbar(frame_musicales, orient="vertical", command=canvas.yview)
         inner_frame = ttk.Frame(canvas)
@@ -285,19 +314,45 @@ class MetadataApp:
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
+        # Botones seleccionar/deseleccionar todo
+        tools_frame = ttk.Frame(inner_frame)
+        tools_frame.pack(fill="x", pady=(0, 5))
+
+        ttk.Button(
+            tools_frame,
+            text="Seleccionar todo",
+            command=lambda: self._toggle_all_music(True)
+        ).pack(side="left", padx=(0, 5))
+
+        ttk.Button(
+            tools_frame,
+            text="Deseleccionar todo",
+            command=lambda: self._toggle_all_music(False)
+        ).pack(side="left")
+
+        # Checkboxes de cada metadato musical
         for key in self.music_fields:
             friendly = get_friendly_name(key)
             label_text = f"{friendly} [{key}]" if friendly != key else key
 
-            # Activamos por defecto los típicos "bonitos"
             base = get_base_tag_key(key).upper()
             default_on = base in ("TIT2", "TPE1", "TALB", "TDRC", "TYER", "TRCK", "TCON") \
                          or key.lower() in ("title", "artist", "album", "date", "tracknumber", "genre")
 
             var = tk.BooleanVar(value=default_on)
             chk = ttk.Checkbutton(inner_frame, text=label_text, variable=var)
-            chk.pack(anchor="w")
+            chk.pack(anchor="w", pady=1)
             self.field_vars[key] = var
+
+        frame_main.columnconfigure(0, weight=1)
+        frame_main.columnconfigure(1, weight=2)
+
+    def _toggle_all_music(self, state: bool):
+        """Marcar o desmarcar todos los metadatos musicales."""
+        for key in self.music_fields:
+            var = self.field_vars.get(key)
+            if var is not None:
+                var.set(state)
 
     def on_exportar(self):
         if not self.data_rows:
@@ -335,7 +390,6 @@ class MetadataApp:
         renames = {}
         for col in selected_music:
             renames[col] = header_for_excel(col)
-        # Campos básicos los dejamos tal cual
         df = df.rename(columns=renames)
 
         # Seleccionar/decidir Excel de salida
@@ -347,8 +401,8 @@ class MetadataApp:
             messagebox.showerror("Error al guardar", f"No se pudo guardar el Excel:\n{e}")
             return
 
+        self.status_label.config(text=f"Exportación completada: {ruta_excel}")
         messagebox.showinfo("Exportación completada", f"Metadatos exportados a:\n{ruta_excel}")
-
 
     def seleccionar_salida_excel(self):
         """
@@ -357,7 +411,7 @@ class MetadataApp:
         con foldername sin espacios.
         """
         if self.carpeta_origen:
-            foldername = os.path.basename(self.carpeta_origen.rstrip(r"\/"))
+            foldername = os.path.basename(self.carpeta_origen.rstrip(r"\\/"))
         else:
             foldername = "output"
 
@@ -378,6 +432,8 @@ class MetadataApp:
         return ruta_seleccionada
 
 
+# -------- utilidades globales ---------
+
 def ruta_truncada(path, max_len=60):
     """Trunca rutas largas para mostrarlas en la etiqueta."""
     if len(path) <= max_len:
@@ -386,27 +442,76 @@ def ruta_truncada(path, max_len=60):
         return "..." + path[-(max_len - 3):]
 
 
-def aplicar_tema_sun_valley(root, modo="dark"):
-    """
-    Aplica el tema Sun Valley usando la librería oficial sv-ttk.
-    modo: "dark" o "light"
-    """
+def aplicar_tema_sun_valley(modo="dark"):
+    """Aplica el tema Sun Valley usando sv-ttk."""
+    if sv_ttk is None:
+        return
     try:
-        # Este es el uso recomendado en la documentación oficial:
-        # sv_ttk.set_theme("dark") o sv_ttk.set_theme("light")
         sv_ttk.set_theme(modo)
     except Exception as e:
         print("No se pudo aplicar el tema Sun Valley:", e)
 
 
+# -------- splash screen + arranque con UNA sola instancia de Tk ---------
 
 def main():
+    # Creamos un único root
     root = tk.Tk()
+    root.withdraw()  # lo ocultamos mientras mostramos el splash
 
-    # "dark" o "light"
-    aplicar_tema_sun_valley(root, modo="dark")
+    aplicar_tema_sun_valley("dark")
 
-    app = MetadataApp(root)
+    # Creamos el splash como Toplevel hijo del root
+    splash = tk.Toplevel(root)
+    splash.overrideredirect(True)      # sin bordes ni barra de título
+    splash.wm_attributes("-topmost", True)
+
+    # Intentar cargar imagen de splash
+    try:
+        splash_img = tk.PhotoImage(file="splash_metadata_audio.png")
+    except Exception:
+        splash_img = None
+
+    if splash_img is not None:
+        lbl = tk.Label(splash, image=splash_img, bg="#111111")
+        lbl.pack()
+        # mantener referencia para que no se libere
+        splash._img = splash_img
+
+        splash.update_idletasks()
+        w = splash_img.width()
+        h = splash_img.height()
+    else:
+        # Fallback sin imagen
+        lbl = tk.Label(
+            splash,
+            text="Metamusic Extract",
+            font=("Segoe UI", 16),
+            padx=20,
+            pady=20
+        )
+        lbl.pack()
+        splash.update_idletasks()
+        w = lbl.winfo_reqwidth()
+        h = lbl.winfo_reqheight()
+
+    # Centrar splash
+    sw = splash.winfo_screenwidth()
+    sh = splash.winfo_screenheight()
+    x = (sw - w) // 2
+    y = (sh - h) // 2
+    splash.geometry(f"{w}x{h}+{x}+{y}")
+
+    def start_main_app():
+        # Cerrar splash y mostrar ventana principal
+        splash.destroy()
+        root.deiconify()        # mostramos el roots
+        MetadataApp(root)       # construimos la app principal sobre root
+
+    # Tras 1500 ms (1.5 s) cerramos el splash y arrancamos la app
+    splash.after(1500, start_main_app)
+
+    # Arrancamos el loop principal con el splash activo
     root.mainloop()
 
 
