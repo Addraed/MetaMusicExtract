@@ -7,6 +7,8 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 from tkinter import ttk
 
+import sv_ttk
+
 
 AUDIO_EXTS = ('.mp3', '.flac', '.m4a', '.ogg')
 
@@ -303,8 +305,15 @@ class MetadataApp:
             return
 
         # Qué campos ha seleccionado el usuario
-        selected_basic = [f for f in self.basic_fields if self.field_vars.get(f, tk.BooleanVar(False)).get()]
-        selected_music = [k for k in self.music_fields if self.field_vars.get(k, tk.BooleanVar(False)).get()]
+        selected_basic = [
+            f for f in self.basic_fields
+            if (f in self.field_vars) and self.field_vars[f].get()
+        ]
+
+        selected_music = [
+            k for k in self.music_fields
+            if (k in self.field_vars) and self.field_vars[k].get()
+        ]
 
         selected_fields = selected_basic + selected_music
 
@@ -339,6 +348,7 @@ class MetadataApp:
             return
 
         messagebox.showinfo("Exportación completada", f"Metadatos exportados a:\n{ruta_excel}")
+
 
     def seleccionar_salida_excel(self):
         """
@@ -376,23 +386,26 @@ def ruta_truncada(path, max_len=60):
         return "..." + path[-(max_len - 3):]
 
 
-def aplicar_tema_sun_valley(root):
+def aplicar_tema_sun_valley(root, modo="dark"):
     """
-    Intenta cargar el tema Sun Valley (sun-valley.tcl).
-    Si falla, simplemente usa el tema por defecto.
+    Aplica el tema Sun Valley usando la librería oficial sv-ttk.
+    modo: "dark" o "light"
     """
     try:
-        root.tk.call("source", "sun-valley.tcl")
-        style = ttk.Style(root)
-        # Puedes cambiar a "sun-valley-light" si prefieres claro
-        style.theme_use("sun-valley-dark")
+        # Este es el uso recomendado en la documentación oficial:
+        # sv_ttk.set_theme("dark") o sv_ttk.set_theme("light")
+        sv_ttk.set_theme(modo)
     except Exception as e:
-        print("No se pudo cargar el tema Sun Valley:", e)
+        print("No se pudo aplicar el tema Sun Valley:", e)
+
 
 
 def main():
     root = tk.Tk()
-    aplicar_tema_sun_valley(root)
+
+    # "dark" o "light"
+    aplicar_tema_sun_valley(root, modo="dark")
+
     app = MetadataApp(root)
     root.mainloop()
 
