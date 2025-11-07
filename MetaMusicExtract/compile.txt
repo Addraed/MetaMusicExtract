@@ -1,0 +1,7 @@
+To compile the .exe file you need to use auto-pu-to-exe. Then follow these parameters
+
+Select the .py file in the MetaMusicExtract as source to compile.
+Select one file in the Onefile section. 
+Add the .ico file as icon
+In Advanced name the .exe MetaMusicExtract 
+select the splash png image in the splash field 
