@@ -2,7 +2,8 @@
 
 > Extrae y exporta los metadatos de tus archivos de música a Excel con un solo clic.
 
-![Splash](splash_metadata_audio.png)
+<img src="MetaMusicExtract/splash_metadata_audio.png" width="450" alt="MetaMusicExtract Splash"/>
+
 
 ---
 
